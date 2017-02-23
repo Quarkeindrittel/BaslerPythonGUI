@@ -11,14 +11,11 @@ import cv2
 import pypylon as py
 import numpy as np
 import os.path as path
-import os
 import pandas as pd
-import copy
+import tempfile
 
 class CamLabel(QtWidgets.QLabel):
     move = pyqtSignal()
-    if not path.exists('.temp'):
-        os.mkdir('.temp')
     def __init__(self):
         super().__init__()
         self.setUP()
@@ -73,8 +70,7 @@ class App(QtWidgets.QMainWindow):
 
         self.horizontalLayout_3 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_3.setContentsMargins(11,11,11,11)
-        self.horizontalLayout_3.setSpacing(6)
-
+        self.horizontalLayout_3.setSpacing(6)        
         
         self.labelExposure = QtWidgets.QLabel('ExposureTime [\mu s]')
         self.sliderExposure = QtWidgets.QSlider(enabled=False)
@@ -88,7 +84,7 @@ class App(QtWidgets.QMainWindow):
         self.sliderExposure.valueChanged['int'].connect(self.spinBoxExposure.setValue)
         self.spinBoxExposure.valueChanged['int'].connect(self.sliderExposure.setValue)
         
-        
+        self.btnSavesingle = QtWidgets.QPushButton('Save current picture',enabled=False)        
         
         self.horizontalLayout_3.addWidget(self.labelExposure)
         self.horizontalLayout_3.addWidget(self.spinBoxExposure)
@@ -106,6 +102,10 @@ class App(QtWidgets.QMainWindow):
         self.horizontalLayout_6 =QtWidgets.QHBoxLayout()
         self.horizontalLayout_6.setContentsMargins(11,11,11,11)
         self.horizontalLayout_6.setSpacing(6)
+        
+        self.horizontalLayout_7 =QtWidgets.QHBoxLayout()
+        self.horizontalLayout_7.setContentsMargins(11,11,11,11)
+        self.horizontalLayout_7.setSpacing(6)
         
         
         self.labelPixelFormat = QtWidgets.QLabel('PixelFormat',enabled=False)
@@ -145,6 +145,9 @@ class App(QtWidgets.QMainWindow):
         self.btnZoomIn = QtWidgets.QPushButton('ZoomIn',enabled=False)
         self.btnZoomOut = QtWidgets.QPushButton('ZoomOut',enabled=False)
         
+        self.horizontalLayout_7.addWidget(self.btnZoomIn)
+        self.horizontalLayout_7.addWidget(self.btnZoomOut)        
+        
         self.comboBox = QtWidgets.QComboBox()
         self.comboBox.setObjectName('comboBox')
         
@@ -158,14 +161,19 @@ class App(QtWidgets.QMainWindow):
         self.pic_area.setGeometry(QtCore.QRect(0, 0, 600, 600))
 
         self.scrollArea.setWidget(self.pic_area)
+
+        
+        self.gridLayoutSave = QtWidgets.QGridLayout()
+        self.gridLayoutSave.addWidget(self.btnSave,1,1)
+        self.gridLayoutSave.addWidget(self.pbarSave,2,1)
+        self.gridLayoutSave.addWidget(self.btnSavesingle,1,2)
+
         
         self.horizontalLayout_1.addWidget(self.scrollArea)
         self.verticalLayout_1.addWidget(self.comboBox)
-        self.verticalLayout_1.addWidget(self.btnSave)
-        self.verticalLayout_1.addWidget(self.pbarSave)
-        self.verticalLayout_1.addWidget(self.btnRun)
-        self.verticalLayout_1.addWidget(self.btnZoomIn)
-        self.verticalLayout_1.addWidget(self.btnZoomOut)
+        self.verticalLayout_1.addWidget(self.btnRun)        
+        self.verticalLayout_1.addLayout(self.gridLayoutSave)
+        self.verticalLayout_1.addLayout(self.horizontalLayout_7)
         self.verticalLayout_1.addLayout(self.horizontalLayout_5)
         self.verticalLayout_1.addLayout(self.horizontalLayout_6)
         self.verticalLayout_1.addLayout(self.horizontalLayout_2)
@@ -184,6 +192,7 @@ class App(QtWidgets.QMainWindow):
         
         self.timer = QtCore.QBasicTimer()
         self.populate()
+        self.tempdir = tempfile.gettempdir()
 
         
         self.setWindowTitle('Basler Camera UI')
@@ -214,7 +223,19 @@ class App(QtWidgets.QMainWindow):
         self.comboBoxPixel.currentIndexChanged.connect(self.setProperties)
         self.boxcolorTable.currentIndexChanged.connect(self.setImageTable)
         self.pic_area.move.connect(self.showStatusBar)
-        
+        self.btnSavesingle.clicked.connect(self.saveCurrentPic)
+    
+    def saveCurrentPic(self):
+        if self.timer.isActive():
+            self.doAction()
+        QtWidgets.QMessageBox.information(self, "SaveFile","Please enter the filepath plus File-Format for the images to be saved (e.g. test.tiff). Supported File-Formats are .bmp, .jpg, .png, .webp, .tiff. Default is .tiff")
+        pathname = QtWidgets.QFileDialog.getSaveFileName(self)
+        if not not pathname[0]:
+            file, extension = path.splitext(pathname[0])
+            if not extension in ['.bmp','.jpg','.png','.webp','.tiff']:
+                extension = '.tiff'        
+            cv2.imwrite(file + extension,self.a)
+    
     def showStatusBar(self):
         try:
             self.statusBar().showMessage(str([int(self.pic_area.mousePos.y()/self.scaleFactor),
@@ -344,6 +365,7 @@ class App(QtWidgets.QMainWindow):
             self.getProperties()
 
         if Picture is True:
+            self.btnSavesingle.setEnabled(True)
             imgPlot, imgSave = self.changeImgForamt(self.a)
             if self.saveimage:
                 cv2.imwrite(self.file + '_' + str(self.numberImagesSaved)+self.extension,imgSave)
@@ -352,14 +374,14 @@ class App(QtWidgets.QMainWindow):
                 if self.numberImages==self.numberImagesSaved:
                     self.saveimage = False
                     self.doAction()
-                    
+        
             '''
             the image-data has to be saved via cv2 and opened by QImage. It's quite dirty, but the option of
             prozessing the image-data directly with QImage unfortunatly doesn't work
             '''
             #QIPlot = QtGui.QImage(imgPlot,imgPlot.shape[1],imgPlot.shape[0],QtGui.QImage.Format_Indexed8)
-            cv2.imwrite('.temp/plot.png',imgPlot)
-            QIPlot_help = QtGui.QImage('.temp/plot.png')
+            cv2.imwrite(path.join(self.tempdir,'plot.png'),imgPlot)
+            QIPlot_help = QtGui.QImage(path.join(self.tempdir,'plot.png'))
             
             QIPlot = QIPlot_help.convertToFormat(QtGui.QImage.Format_Indexed8)
             self.QI = QIPlot

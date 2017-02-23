@@ -54,14 +54,13 @@ class App(QtWidgets.QMainWindow):
         self.labelGain = QtWidgets.QLabel('Gain')
         self.sliderGain = QtWidgets.QSlider(enabled=False)
         self.sliderGain.setOrientation(QtCore.Qt.Horizontal)
-        self.sliderGain.setMinimum(self.gainMin)
-        self.sliderGain.setMaximum(self.gainMax)
+
         self.spinBoxGain = QtWidgets.QSpinBox(enabled=False)
-        self.spinBoxGain.setMinimum(self.gainMin)
-        self.spinBoxGain.setMaximum(self.gainMax)
+
         
-        self.sliderGain.valueChanged['int'].connect(self.spinBoxGain.setValue)
+        
         self.spinBoxGain.valueChanged['int'].connect(self.sliderGain.setValue)
+        self.sliderGain.valueChanged['int'].connect(self.spinBoxGain.setValue)
         
         
         self.horizontalLayout_2.addWidget(self.labelGain)
@@ -75,20 +74,16 @@ class App(QtWidgets.QMainWindow):
         self.labelExposure = QtWidgets.QLabel('ExposureTime [\mu s]')
         self.sliderExposure = QtWidgets.QSlider(enabled=False)
         self.sliderExposure.setOrientation(QtCore.Qt.Horizontal)
-        self.sliderExposure.setMinimum(self.exposureTimeMin)
-        self.sliderExposure.setMaximum(self.exposureTimeMax)
         self.spinBoxExposure = QtWidgets.QSpinBox(enabled=False)
-        self.spinBoxExposure.setMinimum(self.exposureTimeMin)
-        self.spinBoxExposure.setMaximum(self.exposureTimeMax)
-        
-        self.sliderExposure.valueChanged['int'].connect(self.spinBoxExposure.setValue)
+
         self.spinBoxExposure.valueChanged['int'].connect(self.sliderExposure.setValue)
+        self.sliderExposure.valueChanged['int'].connect(self.spinBoxExposure.setValue)
+
         
         self.btnSavesingle = QtWidgets.QPushButton('Save current picture',enabled=False)        
         
         self.horizontalLayout_3.addWidget(self.labelExposure)
         self.horizontalLayout_3.addWidget(self.spinBoxExposure)
-        self.horizontalLayout_3.addWidget(self.sliderExposure)
 
 
         self.horizontalLayout_4 = QtWidgets.QHBoxLayout()
@@ -178,6 +173,7 @@ class App(QtWidgets.QMainWindow):
         self.verticalLayout_1.addLayout(self.horizontalLayout_6)
         self.verticalLayout_1.addLayout(self.horizontalLayout_2)
         self.verticalLayout_1.addLayout(self.horizontalLayout_3)
+        self.verticalLayout_1.addWidget(self.sliderExposure)
         self.verticalLayout_1.addLayout(self.horizontalLayout_4)
         
         self.horizontalLayout_1.addLayout(self.verticalLayout_1)
@@ -209,7 +205,7 @@ class App(QtWidgets.QMainWindow):
                             'KindImann':'colorTables/kindlmann-table-byte-0256.csv',
                             'Extended KindImann':'colorTables/extended-kindlmann-table-byte-0256.csv',
                             'Grey':'colorTables/grey-color-table-byte-0256.csv'}
-        
+
         self.comboBox.activated['QString'].connect(self.onActivated)
         QtCore.QMetaObject.connectSlotsByName(self)    
 
@@ -218,12 +214,23 @@ class App(QtWidgets.QMainWindow):
         self.btnZoomIn.clicked.connect(self.zoomIn)
         self.btnZoomOut.clicked.connect(self.zoomOut)
         self.boxTrigger.currentIndexChanged.connect(self.setProperties)
-        self.spinBoxExposure.valueChanged['int'].connect(self.setProperties)
-        self.spinBoxGain.valueChanged['int'].connect(self.setProperties) 
+
         self.comboBoxPixel.currentIndexChanged.connect(self.setProperties)
         self.boxcolorTable.currentIndexChanged.connect(self.setImageTable)
         self.pic_area.move.connect(self.showStatusBar)
         self.btnSavesingle.clicked.connect(self.saveCurrentPic)
+    
+    def setGainExposure(self):
+        self.sliderGain.setMinimum(self.gainMin)
+        self.sliderGain.setMaximum(self.gainMax)
+        self.spinBoxGain.setMinimum(self.gainMin)
+        self.spinBoxGain.setMaximum(self.gainMax)
+        self.sliderExposure.setMinimum(self.exposureTimeMin)
+        self.sliderExposure.setMaximum(self.exposureTimeMax)
+        self.spinBoxExposure.setMinimum(self.exposureTimeMin)
+        self.spinBoxExposure.setMaximum(self.exposureTimeMax)
+        self.spinBoxExposure.valueChanged['int'].connect(self.setProperties)
+        self.spinBoxGain.valueChanged['int'].connect(self.setProperties) 
     
     def saveCurrentPic(self):
         if self.timer.isActive():
@@ -279,12 +286,32 @@ class App(QtWidgets.QMainWindow):
         self.setImageTable()
 
     def getProperties(self):
+        '''
+        Quite ugly method for getting the gain and exposure time range for the selected cam.
+        Unfortunatly there is no cam property with these values.
+        '''
+        try:
+            self.cam.properties['GainRaw'] = 1
+        except Exception as e:
+            s = str(e)
+        self.gainMin = int(float(s.split()[-4].strip('[').strip(',')))
+        self.gainMax = int(float(s.split()[-3].strip(',').strip(']')))
+        try:
+            self.cam.properties['ExposureTimeAbs'] = 1
+        except Exception as e:
+            s = str(e)
+        self.exposureTimeMin  = int(float(s.split()[-4].strip('[').strip(',')))
+        self.exposureTimeMax = int(float(s.split()[-3].strip(',').strip(']')))
+        self.setGainExposure()
+   
+        
         for prop in self.properties.keys():
             if isinstance(self.properties[prop],QtWidgets.QSpinBox):
                 self.properties[prop].setValue(self.cam.properties[prop])
             else:
                 self.index = self.properties[prop].findText(self.cam.properties[prop])
                 self.properties[prop].setCurrentIndex(self.index)
+
                 
     def setProperties(self):
         if self.cam.opened is False:
@@ -335,7 +362,6 @@ class App(QtWidgets.QMainWindow):
                 self.pbarSave.setMaximum(self.numberImages)
                 self.numberImagesSaved = 0
                 self.saveimage = True
-                print(self.numberImages,ok)
                 self.doAction()
             
     def doAction(self):
